@@ -11,12 +11,23 @@ app.use(cors());
 app.use(express.json());
 
 // Healthie API configuration
-// Use staging API for sandbox keys (starting with gh_sbox_)
 const HEALTHIE_API_KEY = process.env.HEALTHIE_API_KEY;
-const isSandboxKey = HEALTHIE_API_KEY && HEALTHIE_API_KEY.startsWith('gh_sbox_');
-const HEALTHIE_API_URL = isSandboxKey
+
+// Determine environment: use HEALTHIE_ENV if set, otherwise auto-detect from API key
+let healthieEnv = process.env.HEALTHIE_ENV?.toLowerCase();
+if (!healthieEnv || (healthieEnv !== 'staging' && healthieEnv !== 'production')) {
+  // Auto-detect: sandbox keys (starting with gh_sbox_) use staging
+  const isSandboxKey = HEALTHIE_API_KEY && HEALTHIE_API_KEY.startsWith('gh_sbox_');
+  healthieEnv = isSandboxKey ? 'staging' : 'production';
+}
+
+const isStaging = healthieEnv === 'staging';
+const HEALTHIE_API_URL = isStaging
   ? 'https://staging-api.gethealthie.com/graphql'
   : 'https://api.gethealthie.com/graphql';
+
+console.log(`🌍 Healthie Environment: ${healthieEnv.toUpperCase()}`);
+console.log(`📡 API URL: ${HEALTHIE_API_URL}`);
 
 // GraphQL query to fetch user information
 const getUserQuery = (userId) => `
@@ -187,7 +198,7 @@ app.get('/api/websocket-url', (req, res) => {
     return res.status(500).json({ error: 'Healthie API key not configured' });
   }
 
-  const wsUrl = isSandboxKey
+  const wsUrl = isStaging
     ? `wss://ws.staging.gethealthie.com/subscriptions?token=${HEALTHIE_API_KEY}`
     : `wss://ws.gethealthie.com/subscriptions?token=${HEALTHIE_API_KEY}`;
 
@@ -276,9 +287,9 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Healthie API URL: ${HEALTHIE_API_URL}`);
-  console.log(`Healthie API Key configured: ${HEALTHIE_API_KEY ? 'Yes' : 'No'}`);
-  console.log(`Environment: ${isSandboxKey ? 'Sandbox/Staging' : 'Production'}`);
+  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log(`🌍 Healthie Environment: ${healthieEnv.toUpperCase()}`);
+  console.log(`📡 API URL: ${HEALTHIE_API_URL}`);
+  console.log(`🔑 API Key configured: ${HEALTHIE_API_KEY ? 'Yes' : 'No'}`);
 });
 
