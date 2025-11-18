@@ -181,6 +181,19 @@ app.post('/api/conversation', async (req, res) => {
 });
 
 // API endpoint to create a note (send a message)
+// Get WebSocket URL endpoint
+app.get('/api/websocket-url', (req, res) => {
+  if (!HEALTHIE_API_KEY) {
+    return res.status(500).json({ error: 'Healthie API key not configured' });
+  }
+
+  const wsUrl = isSandboxKey
+    ? `wss://ws.staging.gethealthie.com/subscriptions?token=${HEALTHIE_API_KEY}`
+    : `wss://ws.gethealthie.com/subscriptions?token=${HEALTHIE_API_KEY}`;
+
+  res.json({ wsUrl });
+});
+
 app.post('/api/create-note', async (req, res) => {
   try {
     const { conversationId, content, userId } = req.body;

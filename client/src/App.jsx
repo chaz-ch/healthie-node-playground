@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 function App() {
@@ -13,6 +13,11 @@ function App() {
   const [error, setError] = useState(null)
   const [newMessage, setNewMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
+  const [wsConnected, setWsConnected] = useState(false)
+
+  const wsRef = useRef(null)
+  const channelIdRef = useRef(null)
+  const messagesEndRef = useRef(null)
 
   const CONVERSATIONS_PER_PAGE = 2
 
@@ -127,8 +132,7 @@ function App() {
       }
 
       if (data.createNote && data.createNote.note) {
-        // Add the new message to the conversation
-        setConversationMessages([...conversationMessages, data.createNote.note])
+        // Note: Don't add the message here - the WebSocket subscription will handle it
         setNewMessage('')
       }
     } catch (err) {
@@ -138,6 +142,249 @@ function App() {
       setSendingMessage(false)
     }
   }
+
+  // Polling effect - check for new messages every 3 seconds
+  useEffect(() => {
+    if (!selectedConversation) {
+      return
+    }
+
+    console.log('🔄 Starting polling for conversation:', selectedConversation.id)
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/conversation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId: selectedConversation.id
+          })
+        })
+
+        const data = await response.json()
+
+        if (data.conversation && data.conversation.notes) {
+          const newMessages = data.conversation.notes
+
+          setConversationMessages(prevMessages => {
+            // Check if there are any new messages
+            const prevIds = new Set(prevMessages.map(msg => msg.id))
+            const hasNewMessages = newMessages.some(msg => !prevIds.has(msg.id))
+
+            if (hasNewMessages) {
+              console.log('✨ New messages detected via polling!')
+              return newMessages
+            }
+
+            return prevMessages
+          })
+        }
+      } catch (err) {
+        console.error('Polling error:', err)
+      }
+    }, 3000) // Poll every 3 seconds
+
+    return () => {
+      console.log('🛑 Stopping polling for conversation:', selectedConversation.id)
+      clearInterval(pollInterval)
+    }
+  }, [selectedConversation])
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (conversationMessages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [conversationMessages])
+
+  // WebSocket subscription effect (keeping for future use, but not critical)
+  useEffect(() => {
+    if (!selectedConversation) {
+      // Clean up WebSocket when no conversation is selected
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+        channelIdRef.current = null
+        setWsConnected(false)
+      }
+      return
+    }
+
+    // Fetch WebSocket URL from backend and set up connection
+    const setupWebSocket = async () => {
+      try {
+        // Get WebSocket URL with API key from backend
+        const response = await fetch('http://localhost:3001/api/websocket-url')
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to get WebSocket URL')
+        }
+
+        const wsUrl = data.wsUrl
+
+        // Generate a unique channel ID
+        const channelId = Math.round(Date.now() + Math.random() * 100000).toString(16)
+        channelIdRef.current = channelId
+
+        console.log('🔌 Creating WebSocket connection...')
+        console.log('WebSocket URL (without token):', wsUrl.split('?')[0])
+        console.log('Channel ID:', channelId)
+        console.log('Conversation ID:', selectedConversation.id)
+
+        // Create WebSocket connection
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+    // Set up message handler BEFORE connection opens
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+
+        // Log ALL messages including pings for debugging
+        console.log('WebSocket RAW message:', JSON.stringify(message, null, 2))
+
+        // Check for errors or rejections
+        if (message.type === 'reject_subscription') {
+          console.error('❌ Subscription rejected:', message)
+        }
+
+        if (message.message && typeof message.message === 'object' && message.message.errors) {
+          console.error('❌ GraphQL errors:', message.message.errors)
+        }
+
+        // Handle welcome message
+        if (message.type === 'welcome') {
+          console.log('✅ Received welcome message! Subscribing to channel...')
+          console.log('Channel ID:', channelId)
+
+          // Subscribe to the channel
+          const subscribeMessage = {
+            command: 'subscribe',
+            identifier: JSON.stringify({
+              channel: 'GraphqlChannel',
+              channelId: channelId
+            })
+          }
+          console.log('Sending subscribe command:', JSON.stringify(subscribeMessage, null, 2))
+          ws.send(JSON.stringify(subscribeMessage))
+        }
+
+        // Handle subscription confirmation
+        if (message.type === 'confirm_subscription') {
+          console.log('✅ Subscription confirmed! Setting up noteAddedSubscription...')
+          console.log('Conversation ID:', selectedConversation.id)
+
+          // Try the exact format from Healthie docs - JSON stringified with query and variables
+          const subscriptionData = JSON.stringify({
+            query: `subscription onNoteAddedSubscription($id: String) {
+  noteAddedSubscription(conversationId: $id) {
+    id
+    content
+    created_at
+    updated_at
+    creator {
+      id
+      first_name
+      last_name
+    }
+  }
+}`,
+            variables: {
+              id: selectedConversation.id
+            }
+          })
+
+          console.log('Sending GraphQL subscription data:', subscriptionData)
+
+          const messageCommand = {
+            command: 'message',
+            identifier: JSON.stringify({
+              channel: 'GraphqlChannel',
+              channelId: channelId
+            }),
+            data: subscriptionData
+          }
+
+          console.log('Full message command:', JSON.stringify(messageCommand, null, 2))
+          ws.send(JSON.stringify(messageCommand))
+        }
+
+        // Handle subscription data (new notes)
+        // Check multiple possible message structures
+        let noteData = null
+
+        // Check if this is a subscription data message (has identifier and message properties)
+        if (message.identifier && message.message) {
+          console.log('📨 Potential subscription data message detected!')
+          console.log('Identifier:', message.identifier)
+          console.log('Message:', JSON.stringify(message.message, null, 2))
+
+          // Structure 1: message.message.result.data.noteAddedSubscription
+          if (message.message.result && message.message.result.data) {
+            noteData = message.message.result.data.noteAddedSubscription
+            console.log('✅ Found noteData in message.message.result.data.noteAddedSubscription')
+          }
+        }
+
+        if (noteData) {
+          console.log('🎉 New note received via WebSocket:', noteData)
+          // Add the new note to the conversation messages
+          setConversationMessages(prevMessages => {
+            // Check if message already exists to avoid duplicates
+            const exists = prevMessages.some(msg => msg.id === noteData.id)
+            if (exists) {
+              console.log('Note already exists, skipping:', noteData.id)
+              return prevMessages
+            }
+            console.log('Adding new note to conversation:', noteData.id)
+            return [...prevMessages, noteData]
+          })
+        }
+      } catch (err) {
+        console.error('❌ Error parsing WebSocket message:', err, event.data)
+      }
+    }
+
+        ws.onopen = () => {
+          console.log('✅ WebSocket connected! Waiting for welcome message...')
+          setWsConnected(true)
+        }
+
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket error:', error)
+          setWsConnected(false)
+        }
+
+        ws.onclose = (event) => {
+          console.log('🔌 WebSocket disconnected. Code:', event.code, 'Reason:', event.reason)
+          setWsConnected(false)
+        }
+
+        // Cleanup on unmount or conversation change
+        return () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.close()
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error setting up WebSocket:', err)
+        setError(err.message)
+        setWsConnected(false)
+      }
+    }
+
+    setupWebSocket()
+
+    // Cleanup function
+    return () => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close()
+      }
+    }
+  }, [selectedConversation])
 
   const totalPages = Math.ceil(conversations.length / CONVERSATIONS_PER_PAGE)
   const startIndex = currentPage * CONVERSATIONS_PER_PAGE
@@ -234,9 +481,15 @@ function App() {
               {selectedConversation ? (
                 <>
                   <div className="conversation-detail-header">
-                    <button onClick={handleBackToList} className="back-button">
-                      ← Back to Conversations
-                    </button>
+                    <div className="header-top">
+                      <button onClick={handleBackToList} className="back-button">
+                        ← Back to Conversations
+                      </button>
+                      <div className={`ws-status ${wsConnected ? 'connected' : 'disconnected'}`}>
+                        <span className="ws-indicator"></span>
+                        {wsConnected ? 'Live' : 'Connecting...'}
+                      </div>
+                    </div>
                     <h2>{selectedConversation.name || 'Untitled Conversation'}</h2>
                   </div>
 
@@ -246,27 +499,30 @@ function App() {
                     <>
                       <div className="messages-container">
                         {conversationMessages.length > 0 ? (
-                          conversationMessages.map((message) => {
-                            const isCurrentUser = message.creator?.id === userData.id
-                            return (
-                              <div
-                                key={message.id}
-                                className={`message ${isCurrentUser ? 'message-sent' : 'message-received'}`}
-                              >
-                                <div className="message-header">
-                                  <span className="message-sender">
-                                    {message.creator?.first_name} {message.creator?.last_name}
-                                  </span>
-                                  <span className="message-time">
-                                    {new Date(message.created_at).toLocaleString()}
-                                  </span>
+                          <>
+                            {conversationMessages.map((message) => {
+                              const isCurrentUser = message.creator?.id === userData.id
+                              return (
+                                <div
+                                  key={message.id}
+                                  className={`message ${isCurrentUser ? 'message-sent' : 'message-received'}`}
+                                >
+                                  <div className="message-header">
+                                    <span className="message-sender">
+                                      {message.creator?.first_name} {message.creator?.last_name}
+                                    </span>
+                                    <span className="message-time">
+                                      {new Date(message.created_at).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="message-content">
+                                    {message.content || '(No content)'}
+                                  </div>
                                 </div>
-                                <div className="message-content">
-                                  {message.content || '(No content)'}
-                                </div>
-                              </div>
-                            )
-                          })
+                              )
+                            })}
+                            <div ref={messagesEndRef} />
+                          </>
                         ) : (
                           <div className="no-messages">No messages in this conversation</div>
                         )}
