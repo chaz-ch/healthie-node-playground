@@ -5,8 +5,11 @@ function App() {
   const [userId, setUserId] = useState('')
   const [userData, setUserData] = useState(null)
   const [conversations, setConversations] = useState([])
+  const [currentPage, setCurrentPage] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const CONVERSATIONS_PER_PAGE = 2
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -20,6 +23,7 @@ function App() {
     setError(null)
     setUserData(null)
     setConversations([])
+    setCurrentPage(0)
 
     try {
       const response = await fetch('http://localhost:3001/api/user', {
@@ -49,6 +53,20 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Calculate pagination
+  const totalPages = Math.ceil(conversations.length / CONVERSATIONS_PER_PAGE)
+  const startIndex = currentPage * CONVERSATIONS_PER_PAGE
+  const endIndex = startIndex + CONVERSATIONS_PER_PAGE
+  const currentConversations = conversations.slice(startIndex, endIndex)
+
+  const handlePreviousPage = () => {
+    setCurrentPage(prev => Math.max(0, prev - 1))
+  }
+
+  const handleNextPage = () => {
+    setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))
   }
 
   return (
@@ -130,70 +148,102 @@ function App() {
             </div>
 
             <div className="conversations-card">
-              <h2>Conversations</h2>
+              <div className="conversations-header">
+                <h2>Conversations</h2>
+                {conversations.length > 0 && (
+                  <div className="conversation-count">
+                    Total: {conversations.length}
+                  </div>
+                )}
+              </div>
+
               {conversations && conversations.length > 0 ? (
-                <div className="conversations-list">
-                  {conversations.map((conversation) => {
-                    // Get other participants (exclude the current user)
-                    const otherParticipants = conversation.invitees
-                      ?.filter(invitee => invitee.id !== userData.id) || [];
+                <>
+                  <div className="conversations-list">
+                    {currentConversations.map((conversation) => {
+                      // Get other participants (exclude the current user)
+                      const otherParticipants = conversation.invitees
+                        ?.filter(invitee => invitee.id !== userData.id) || [];
 
-                    const messageCount = conversation.notes?.length || 0;
+                      const messageCount = conversation.notes?.length || 0;
 
-                    return (
-                      <div key={conversation.id} className="conversation-item">
-                        <div className="conversation-header">
-                          <h3 className="conversation-name">
-                            {conversation.name || 'Untitled Conversation'}
-                          </h3>
-                          <span className="conversation-id">ID: {conversation.id}</span>
-                        </div>
-
-                        {otherParticipants.length > 0 && (
-                          <div className="conversation-participants">
-                            <strong>Participants:</strong>
-                            {otherParticipants.map((participant, index) => (
-                              <div key={participant.id} className="participant-info">
-                                <span className="participant-name">
-                                  {participant.first_name} {participant.last_name}
-                                </span>
-                                <span className="participant-id">(ID: {participant.id})</span>
-                              </div>
-                            ))}
+                      return (
+                        <div key={conversation.id} className="conversation-item">
+                          <div className="conversation-header">
+                            <h3 className="conversation-name">
+                              {conversation.name || 'Untitled Conversation'}
+                            </h3>
+                            <span className="conversation-id">ID: {conversation.id}</span>
                           </div>
-                        )}
 
-                        <div className="conversation-stats">
-                          <span className="message-count">
-                            <strong>Messages:</strong> {messageCount}
-                          </span>
-                        </div>
-
-                        {conversation.last_message_content && (
-                          <div className="conversation-last-message">
-                            <strong>Last message:</strong> {conversation.last_message_content}
-                          </div>
-                        )}
-
-                        <div className="conversation-meta">
-                          {conversation.owner && (
-                            <div className="conversation-owner">
-                              <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+                          {otherParticipants.length > 0 && (
+                            <div className="conversation-participants">
+                              <strong>Participants:</strong>
+                              {otherParticipants.map((participant, index) => (
+                                <div key={participant.id} className="participant-info">
+                                  <span className="participant-name">
+                                    {participant.first_name} {participant.last_name}
+                                  </span>
+                                  <span className="participant-id">(ID: {participant.id})</span>
+                                </div>
+                              ))}
                             </div>
                           )}
-                          <div className="conversation-dates">
-                            <div>
-                              <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+
+                          <div className="conversation-stats">
+                            <span className="message-count">
+                              <strong>Messages:</strong> {messageCount}
+                            </span>
+                          </div>
+
+                          {conversation.last_message_content && (
+                            <div className="conversation-last-message">
+                              <strong>Last message:</strong> {conversation.last_message_content}
                             </div>
-                            <div>
-                              <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                          )}
+
+                          <div className="conversation-meta">
+                            {conversation.owner && (
+                              <div className="conversation-owner">
+                                <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+                              </div>
+                            )}
+                            <div className="conversation-dates">
+                              <div>
+                                <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+                              </div>
+                              <div>
+                                <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="pagination-controls">
+                      <button 
+                        onClick={handlePreviousPage} 
+                        disabled={currentPage === 0}
+                        className="pagination-button"
+                      >
+                        ← Previous
+                      </button>
+                      <span className="pagination-info">
+                        Page {currentPage + 1} of {totalPages}
+                      </span>
+                      <button 
+                        onClick={handleNextPage} 
+                        disabled={currentPage === totalPages - 1}
+                        className="pagination-button"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="no-conversations">
                   No conversations found for this user.
@@ -208,3 +258,4 @@ function App() {
 }
 
 export default App
+
