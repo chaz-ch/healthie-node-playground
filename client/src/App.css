@@ -189,6 +189,58 @@ h1 {
   font-size: 0.85rem;
 }
 
+.conversation-participants {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.conversation-participants strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.participant-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+  background-color: #242424;
+  border-radius: 4px;
+}
+
+.participant-name {
+  color: #646cff;
+  font-weight: 500;
+}
+
+.participant-id {
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.conversation-stats {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.message-count {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.message-count strong {
+  color: #fff;
+  margin-right: 0.25rem;
+}
+
 .conversation-meta {
   display: flex;
   flex-direction: column;

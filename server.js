@@ -37,16 +37,29 @@ const getUserQuery = (userId) => `
         zip
       }
     }
-    conversations(user_id: "${userId}") {
-      id
-      name
-      created_at
-      updated_at
-      last_message_content
-      owner {
+    conversationMemberships(provider_id: "${userId}") {
+      conversation_id
+      display_name
+      convo {
         id
-        first_name
-        last_name
+        name
+        patient_id
+        created_at
+        updated_at
+        last_message_content
+        owner {
+          id
+          first_name
+          last_name
+        }
+        invitees {
+          id
+          first_name
+          last_name
+        }
+        notes {
+          id
+        }
       }
     }
   }
@@ -80,12 +93,14 @@ app.post('/api/user', async (req, res) => {
     );
 
     if (response.data.errors) {
-      return res.status(400).json({ 
-        error: 'Error fetching user data', 
-        details: response.data.errors 
+      console.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+      return res.status(400).json({
+        error: 'Error fetching user data',
+        details: response.data.errors
       });
     }
 
+    console.log('API Response:', JSON.stringify(response.data.data, null, 2));
     res.json(response.data.data);
   } catch (error) {
     console.error('Error fetching user data:', error.message);

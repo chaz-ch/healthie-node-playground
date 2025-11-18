@@ -38,7 +38,9 @@ function App() {
 
       if (data.user) {
         setUserData(data.user)
-        setConversations(data.conversations || [])
+        // Extract conversations from conversationMemberships
+        const convos = data.conversationMemberships?.map(membership => membership.convo) || []
+        setConversations(convos)
       } else {
         setError('User not found')
       }
@@ -131,36 +133,66 @@ function App() {
               <h2>Conversations</h2>
               {conversations && conversations.length > 0 ? (
                 <div className="conversations-list">
-                  {conversations.map((conversation) => (
-                    <div key={conversation.id} className="conversation-item">
-                      <div className="conversation-header">
-                        <h3 className="conversation-name">
-                          {conversation.name || 'Untitled Conversation'}
-                        </h3>
-                        <span className="conversation-id">ID: {conversation.id}</span>
-                      </div>
-                      {conversation.last_message_content && (
-                        <div className="conversation-last-message">
-                          <strong>Last message:</strong> {conversation.last_message_content}
+                  {conversations.map((conversation) => {
+                    // Get other participants (exclude the current user)
+                    const otherParticipants = conversation.invitees
+                      ?.filter(invitee => invitee.id !== userData.id) || [];
+
+                    const messageCount = conversation.notes?.length || 0;
+
+                    return (
+                      <div key={conversation.id} className="conversation-item">
+                        <div className="conversation-header">
+                          <h3 className="conversation-name">
+                            {conversation.name || 'Untitled Conversation'}
+                          </h3>
+                          <span className="conversation-id">ID: {conversation.id}</span>
                         </div>
-                      )}
-                      <div className="conversation-meta">
-                        {conversation.owner && (
-                          <div className="conversation-owner">
-                            <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+
+                        {otherParticipants.length > 0 && (
+                          <div className="conversation-participants">
+                            <strong>Participants:</strong>
+                            {otherParticipants.map((participant, index) => (
+                              <div key={participant.id} className="participant-info">
+                                <span className="participant-name">
+                                  {participant.first_name} {participant.last_name}
+                                </span>
+                                <span className="participant-id">(ID: {participant.id})</span>
+                              </div>
+                            ))}
                           </div>
                         )}
-                        <div className="conversation-dates">
-                          <div>
-                            <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+
+                        <div className="conversation-stats">
+                          <span className="message-count">
+                            <strong>Messages:</strong> {messageCount}
+                          </span>
+                        </div>
+
+                        {conversation.last_message_content && (
+                          <div className="conversation-last-message">
+                            <strong>Last message:</strong> {conversation.last_message_content}
                           </div>
-                          <div>
-                            <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                        )}
+
+                        <div className="conversation-meta">
+                          {conversation.owner && (
+                            <div className="conversation-owner">
+                              <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+                            </div>
+                          )}
+                          <div className="conversation-dates">
+                            <div>
+                              <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+                            </div>
+                            <div>
+                              <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="no-conversations">
