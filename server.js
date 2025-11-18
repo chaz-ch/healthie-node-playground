@@ -180,6 +180,83 @@ app.post('/api/conversation', async (req, res) => {
   }
 });
 
+// API endpoint to create a note (send a message)
+app.post('/api/create-note', async (req, res) => {
+  try {
+    const { conversationId, content, userId } = req.body;
+
+    if (!conversationId || !content || !userId) {
+      return res.status(400).json({ error: 'Conversation ID, content, and user ID are required' });
+    }
+
+    if (!HEALTHIE_API_KEY) {
+      return res.status(500).json({ error: 'Healthie API key not configured' });
+    }
+
+    const mutation = `
+      mutation createNote($input: createNoteInput) {
+        createNote(input: $input) {
+          messages {
+            field
+            message
+          }
+          note {
+            id
+            content
+            created_at
+            updated_at
+            creator {
+              id
+              first_name
+              last_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      input: {
+        conversation_id: conversationId,
+        content: content,
+        user_id: userId
+      }
+    };
+
+    const response = await axios.post(
+      HEALTHIE_API_URL,
+      {
+        query: mutation,
+        variables: variables
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${HEALTHIE_API_KEY}`,
+          'AuthorizationSource': 'API',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data.errors) {
+      console.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+      return res.status(400).json({
+        error: 'Error creating note',
+        details: response.data.errors
+      });
+    }
+
+    console.log('Create Note Response:', JSON.stringify(response.data.data, null, 2));
+    res.json(response.data.data);
+  } catch (error) {
+    console.error('Error creating note:', error.message);
+    res.status(500).json({
+      error: 'Failed to create note',
+      message: error.message
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });

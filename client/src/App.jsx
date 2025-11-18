@@ -11,6 +11,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [newMessage, setNewMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
 
   const CONVERSATIONS_PER_PAGE = 2
 
@@ -93,6 +95,48 @@ function App() {
   const handleBackToList = () => {
     setSelectedConversation(null)
     setConversationMessages([])
+    setNewMessage('')
+  }
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault()
+
+    if (!newMessage.trim()) {
+      return
+    }
+
+    setSendingMessage(true)
+
+    try {
+      const response = await fetch('http://localhost:3001/api/create-note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: selectedConversation.id,
+          content: newMessage.trim(),
+          userId: userData.id
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      if (data.createNote && data.createNote.note) {
+        // Add the new message to the conversation
+        setConversationMessages([...conversationMessages, data.createNote.note])
+        setNewMessage('')
+      }
+    } catch (err) {
+      console.error('Error sending message:', err)
+      setError(err.message)
+    } finally {
+      setSendingMessage(false)
+    }
   }
 
   const totalPages = Math.ceil(conversations.length / CONVERSATIONS_PER_PAGE)
@@ -199,33 +243,53 @@ function App() {
                   {loadingMessages ? (
                     <div className="loading-messages">Loading messages...</div>
                   ) : (
-                    <div className="messages-container">
-                      {conversationMessages.length > 0 ? (
-                        conversationMessages.map((message) => {
-                          const isCurrentUser = message.creator?.id === userData.id
-                          return (
-                            <div
-                              key={message.id}
-                              className={`message ${isCurrentUser ? 'message-sent' : 'message-received'}`}
-                            >
-                              <div className="message-header">
-                                <span className="message-sender">
-                                  {message.creator?.first_name} {message.creator?.last_name}
-                                </span>
-                                <span className="message-time">
-                                  {new Date(message.created_at).toLocaleString()}
-                                </span>
+                    <>
+                      <div className="messages-container">
+                        {conversationMessages.length > 0 ? (
+                          conversationMessages.map((message) => {
+                            const isCurrentUser = message.creator?.id === userData.id
+                            return (
+                              <div
+                                key={message.id}
+                                className={`message ${isCurrentUser ? 'message-sent' : 'message-received'}`}
+                              >
+                                <div className="message-header">
+                                  <span className="message-sender">
+                                    {message.creator?.first_name} {message.creator?.last_name}
+                                  </span>
+                                  <span className="message-time">
+                                    {new Date(message.created_at).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="message-content">
+                                  {message.content || '(No content)'}
+                                </div>
                               </div>
-                              <div className="message-content">
-                                {message.content || '(No content)'}
-                              </div>
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <div className="no-messages">No messages in this conversation</div>
-                      )}
-                    </div>
+                            )
+                          })
+                        ) : (
+                          <div className="no-messages">No messages in this conversation</div>
+                        )}
+                      </div>
+
+                      <form onSubmit={handleSendMessage} className="message-input-form">
+                        <input
+                          type="text"
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          placeholder="Type a message..."
+                          className="message-input"
+                          disabled={sendingMessage}
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingMessage || !newMessage.trim()}
+                          className="send-button"
+                        >
+                          {sendingMessage ? 'Sending...' : 'Send'}
+                        </button>
+                      </form>
+                    </>
                   )}
                 </>
               ) : (
