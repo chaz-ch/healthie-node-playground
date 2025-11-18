@@ -219,8 +219,8 @@ export class HealthieService {
     }
   }
 
-  getWebSocketUrlForClient(): { url: string } {
-    return { url: this.getWebSocketUrl() };
+  getWebSocketUrlForClient(): { wsUrl: string } {
+    return { wsUrl: this.getWebSocketUrl() };
   }
 }
 
