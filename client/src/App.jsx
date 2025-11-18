@@ -4,6 +4,7 @@ import './App.css'
 function App() {
   const [userId, setUserId] = useState('')
   const [userData, setUserData] = useState(null)
+  const [conversations, setConversations] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -18,6 +19,7 @@ function App() {
     setLoading(true)
     setError(null)
     setUserData(null)
+    setConversations([])
 
     try {
       const response = await fetch('http://localhost:3001/api/user', {
@@ -36,6 +38,7 @@ function App() {
 
       if (data.user) {
         setUserData(data.user)
+        setConversations(data.conversations || [])
       } else {
         setError('User not found')
       }
@@ -74,54 +77,98 @@ function App() {
         )}
 
         {userData && (
-          <div className="user-card">
-            <h2>User Information</h2>
-            <div className="user-details">
-              <div className="detail-row">
-                <span className="label">ID:</span>
-                <span className="value">{userData.id}</span>
+          <>
+            <div className="user-card">
+              <h2>User Information</h2>
+              <div className="user-details">
+                <div className="detail-row">
+                  <span className="label">ID:</span>
+                  <span className="value">{userData.id}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Name:</span>
+                  <span className="value">
+                    {userData.first_name} {userData.last_name}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Email:</span>
+                  <span className="value">{userData.email || 'N/A'}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Phone:</span>
+                  <span className="value">{userData.phone_number || 'N/A'}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Date of Birth:</span>
+                  <span className="value">{userData.dob || 'N/A'}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Gender:</span>
+                  <span className="value">{userData.gender || 'N/A'}</span>
+                </div>
+                {userData.location && (
+                  <>
+                    <div className="detail-row">
+                      <span className="label">Address:</span>
+                      <span className="value">
+                        {userData.location.line1}
+                        {userData.location.line2 && `, ${userData.location.line2}`}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">City, State ZIP:</span>
+                      <span className="value">
+                        {userData.location.city}, {userData.location.state} {userData.location.zip}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="detail-row">
-                <span className="label">Name:</span>
-                <span className="value">
-                  {userData.first_name} {userData.last_name}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span className="label">Email:</span>
-                <span className="value">{userData.email || 'N/A'}</span>
-              </div>
-              <div className="detail-row">
-                <span className="label">Phone:</span>
-                <span className="value">{userData.phone_number || 'N/A'}</span>
-              </div>
-              <div className="detail-row">
-                <span className="label">Date of Birth:</span>
-                <span className="value">{userData.dob || 'N/A'}</span>
-              </div>
-              <div className="detail-row">
-                <span className="label">Gender:</span>
-                <span className="value">{userData.gender || 'N/A'}</span>
-              </div>
-              {userData.location && (
-                <>
-                  <div className="detail-row">
-                    <span className="label">Address:</span>
-                    <span className="value">
-                      {userData.location.line1}
-                      {userData.location.line2 && `, ${userData.location.line2}`}
-                    </span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="label">City, State ZIP:</span>
-                    <span className="value">
-                      {userData.location.city}, {userData.location.state} {userData.location.zip}
-                    </span>
-                  </div>
-                </>
+            </div>
+
+            <div className="conversations-card">
+              <h2>Conversations</h2>
+              {conversations && conversations.length > 0 ? (
+                <div className="conversations-list">
+                  {conversations.map((conversation) => (
+                    <div key={conversation.id} className="conversation-item">
+                      <div className="conversation-header">
+                        <h3 className="conversation-name">
+                          {conversation.name || 'Untitled Conversation'}
+                        </h3>
+                        <span className="conversation-id">ID: {conversation.id}</span>
+                      </div>
+                      {conversation.last_message_content && (
+                        <div className="conversation-last-message">
+                          <strong>Last message:</strong> {conversation.last_message_content}
+                        </div>
+                      )}
+                      <div className="conversation-meta">
+                        {conversation.owner && (
+                          <div className="conversation-owner">
+                            <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+                          </div>
+                        )}
+                        <div className="conversation-dates">
+                          <div>
+                            <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+                          </div>
+                          <div>
+                            <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-conversations">
+                  No conversations found for this user.
+                </div>
               )}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

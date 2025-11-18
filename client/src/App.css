@@ -7,7 +7,7 @@
 }
 
 .container {
-  max-width: 600px;
+  max-width: 800px;
   width: 100%;
 }
 
@@ -82,6 +82,7 @@ h1 {
   border-radius: 12px;
   padding: 2rem;
   animation: fadeIn 0.3s ease-in;
+  margin-bottom: 2rem;
 }
 
 .user-card h2 {
@@ -113,6 +114,112 @@ h1 {
 .value {
   color: white;
   text-align: right;
+}
+
+/* Conversations Card */
+.conversations-card {
+  background-color: #1a1a1a;
+  border: 2px solid #646cff;
+  border-radius: 12px;
+  padding: 2rem;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.conversations-card h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #646cff;
+  text-align: center;
+}
+
+.conversations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.conversation-item {
+  background-color: #242424;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: border-color 0.3s, transform 0.2s;
+}
+
+.conversation-item:hover {
+  border-color: #646cff;
+  transform: translateY(-2px);
+}
+
+.conversation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  gap: 1rem;
+}
+
+.conversation-name {
+  margin: 0;
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.conversation-id {
+  color: #888;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.conversation-last-message {
+  padding: 0.75rem;
+  background-color: #1a1a1a;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  color: #ccc;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.conversation-last-message strong {
+  color: #888;
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.conversation-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.conversation-owner {
+  color: #aaa;
+}
+
+.conversation-owner strong {
+  color: #888;
+}
+
+.conversation-dates {
+  display: flex;
+  gap: 1.5rem;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.conversation-dates strong {
+  color: #666;
+}
+
+.no-conversations {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+  font-style: italic;
 }
 
 @keyframes fadeIn {

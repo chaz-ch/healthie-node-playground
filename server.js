@@ -37,6 +37,18 @@ const getUserQuery = (userId) => `
         zip
       }
     }
+    conversations(user_id: "${userId}") {
+      id
+      name
+      created_at
+      updated_at
+      last_message_content
+      owner {
+        id
+        first_name
+        last_name
+      }
+    }
   }
 `;
 
