@@ -65,6 +65,29 @@ const getUserQuery = (userId) => `
   }
 `;
 
+// GraphQL query to fetch conversation messages
+const getConversationQuery = (conversationId) => `
+  query {
+    conversation(id: "${conversationId}") {
+      id
+      name
+      created_at
+      updated_at
+      notes {
+        id
+        content
+        created_at
+        updated_at
+        creator {
+          id
+          first_name
+          last_name
+        }
+      }
+    }
+  }
+`;
+
 // API endpoint to get user information
 app.post('/api/user', async (req, res) => {
   try {
@@ -106,6 +129,52 @@ app.post('/api/user', async (req, res) => {
     console.error('Error fetching user data:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch user data',
+      message: error.message 
+    });
+  }
+});
+
+// API endpoint to get conversation messages
+app.post('/api/conversation', async (req, res) => {
+  try {
+    const { conversationId } = req.body;
+
+    if (!conversationId) {
+      return res.status(400).json({ error: 'Conversation ID is required' });
+    }
+
+    if (!HEALTHIE_API_KEY) {
+      return res.status(500).json({ error: 'Healthie API key not configured' });
+    }
+
+    const response = await axios.post(
+      HEALTHIE_API_URL,
+      {
+        query: getConversationQuery(conversationId)
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${HEALTHIE_API_KEY}`,
+          'AuthorizationSource': 'API',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data.errors) {
+      console.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+      return res.status(400).json({
+        error: 'Error fetching conversation data',
+        details: response.data.errors
+      });
+    }
+
+    console.log('Conversation API Response:', JSON.stringify(response.data.data, null, 2));
+    res.json(response.data.data);
+  } catch (error) {
+    console.error('Error fetching conversation data:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch conversation data',
       message: error.message 
     });
   }

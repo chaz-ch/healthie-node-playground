@@ -5,6 +5,9 @@ function App() {
   const [userId, setUserId] = useState('')
   const [userData, setUserData] = useState(null)
   const [conversations, setConversations] = useState([])
+  const [selectedConversation, setSelectedConversation] = useState(null)
+  const [conversationMessages, setConversationMessages] = useState([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -24,6 +27,8 @@ function App() {
     setUserData(null)
     setConversations([])
     setCurrentPage(0)
+    setSelectedConversation(null)
+    setConversationMessages([])
 
     try {
       const response = await fetch('http://localhost:3001/api/user', {
@@ -42,7 +47,6 @@ function App() {
 
       if (data.user) {
         setUserData(data.user)
-        // Extract conversations from conversationMemberships
         const convos = data.conversationMemberships?.map(membership => membership.convo) || []
         setConversations(convos)
       } else {
@@ -55,7 +59,42 @@ function App() {
     }
   }
 
-  // Calculate pagination
+  const handleConversationClick = async (conversation) => {
+    setSelectedConversation(conversation)
+    setLoadingMessages(true)
+    setConversationMessages([])
+
+    try {
+      const response = await fetch('http://localhost:3001/api/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ conversationId: conversation.id }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch conversation data')
+      }
+
+      if (data.conversation && data.conversation.notes) {
+        setConversationMessages(data.conversation.notes)
+      }
+    } catch (err) {
+      console.error('Error fetching conversation:', err)
+      setError(err.message)
+    } finally {
+      setLoadingMessages(false)
+    }
+  }
+
+  const handleBackToList = () => {
+    setSelectedConversation(null)
+    setConversationMessages([])
+  }
+
   const totalPages = Math.ceil(conversations.length / CONVERSATIONS_PER_PAGE)
   const startIndex = currentPage * CONVERSATIONS_PER_PAGE
   const endIndex = startIndex + CONVERSATIONS_PER_PAGE
@@ -148,106 +187,153 @@ function App() {
             </div>
 
             <div className="conversations-card">
-              <div className="conversations-header">
-                <h2>Conversations</h2>
-                {conversations.length > 0 && (
-                  <div className="conversation-count">
-                    Total: {conversations.length}
-                  </div>
-                )}
-              </div>
-
-              {conversations && conversations.length > 0 ? (
+              {selectedConversation ? (
                 <>
-                  <div className="conversations-list">
-                    {currentConversations.map((conversation) => {
-                      // Get other participants (exclude the current user)
-                      const otherParticipants = conversation.invitees
-                        ?.filter(invitee => invitee.id !== userData.id) || [];
-
-                      const messageCount = conversation.notes?.length || 0;
-
-                      return (
-                        <div key={conversation.id} className="conversation-item">
-                          <div className="conversation-header">
-                            <h3 className="conversation-name">
-                              {conversation.name || 'Untitled Conversation'}
-                            </h3>
-                            <span className="conversation-id">ID: {conversation.id}</span>
-                          </div>
-
-                          {otherParticipants.length > 0 && (
-                            <div className="conversation-participants">
-                              <strong>Participants:</strong>
-                              {otherParticipants.map((participant, index) => (
-                                <div key={participant.id} className="participant-info">
-                                  <span className="participant-name">
-                                    {participant.first_name} {participant.last_name}
-                                  </span>
-                                  <span className="participant-id">(ID: {participant.id})</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="conversation-stats">
-                            <span className="message-count">
-                              <strong>Messages:</strong> {messageCount}
-                            </span>
-                          </div>
-
-                          {conversation.last_message_content && (
-                            <div className="conversation-last-message">
-                              <strong>Last message:</strong> {conversation.last_message_content}
-                            </div>
-                          )}
-
-                          <div className="conversation-meta">
-                            {conversation.owner && (
-                              <div className="conversation-owner">
-                                <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
-                              </div>
-                            )}
-                            <div className="conversation-dates">
-                              <div>
-                                <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
-                              </div>
-                              <div>
-                                <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="conversation-detail-header">
+                    <button onClick={handleBackToList} className="back-button">
+                      ← Back to Conversations
+                    </button>
+                    <h2>{selectedConversation.name || 'Untitled Conversation'}</h2>
                   </div>
 
-                  {totalPages > 1 && (
-                    <div className="pagination-controls">
-                      <button 
-                        onClick={handlePreviousPage} 
-                        disabled={currentPage === 0}
-                        className="pagination-button"
-                      >
-                        ← Previous
-                      </button>
-                      <span className="pagination-info">
-                        Page {currentPage + 1} of {totalPages}
-                      </span>
-                      <button 
-                        onClick={handleNextPage} 
-                        disabled={currentPage === totalPages - 1}
-                        className="pagination-button"
-                      >
-                        Next →
-                      </button>
+                  {loadingMessages ? (
+                    <div className="loading-messages">Loading messages...</div>
+                  ) : (
+                    <div className="messages-container">
+                      {conversationMessages.length > 0 ? (
+                        conversationMessages.map((message) => {
+                          const isCurrentUser = message.creator?.id === userData.id
+                          return (
+                            <div
+                              key={message.id}
+                              className={`message ${isCurrentUser ? 'message-sent' : 'message-received'}`}
+                            >
+                              <div className="message-header">
+                                <span className="message-sender">
+                                  {message.creator?.first_name} {message.creator?.last_name}
+                                </span>
+                                <span className="message-time">
+                                  {new Date(message.created_at).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="message-content">
+                                {message.content || '(No content)'}
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="no-messages">No messages in this conversation</div>
+                      )}
                     </div>
                   )}
                 </>
               ) : (
-                <div className="no-conversations">
-                  No conversations found for this user.
-                </div>
+                <>
+                  <div className="conversations-header">
+                    <h2>Conversations</h2>
+                    {conversations.length > 0 && (
+                      <div className="conversation-count">
+                        Total: {conversations.length}
+                      </div>
+                    )}
+                  </div>
+
+                  {conversations && conversations.length > 0 ? (
+                    <>
+                      <div className="conversations-list">
+                        {currentConversations.map((conversation) => {
+                          const otherParticipants = conversation.invitees
+                            ?.filter(invitee => invitee.id !== userData.id) || []
+                          const messageCount = conversation.notes?.length || 0
+
+                          return (
+                            <div
+                              key={conversation.id}
+                              className="conversation-item"
+                              onClick={() => handleConversationClick(conversation)}
+                            >
+                              <div className="conversation-header">
+                                <h3 className="conversation-name">
+                                  {conversation.name || 'Untitled Conversation'}
+                                </h3>
+                                <span className="conversation-id">ID: {conversation.id}</span>
+                              </div>
+
+                              {otherParticipants.length > 0 && (
+                                <div className="conversation-participants">
+                                  <strong>Participants:</strong>
+                                  {otherParticipants.map((participant) => (
+                                    <div key={participant.id} className="participant-info">
+                                      <span className="participant-name">
+                                        {participant.first_name} {participant.last_name}
+                                      </span>
+                                      <span className="participant-id">(ID: {participant.id})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="conversation-stats">
+                                <span className="message-count">
+                                  <strong>Messages:</strong> {messageCount}
+                                </span>
+                              </div>
+
+                              {conversation.last_message_content && (
+                                <div className="conversation-last-message">
+                                  <strong>Last message:</strong> {conversation.last_message_content}
+                                </div>
+                              )}
+
+                              <div className="conversation-meta">
+                                {conversation.owner && (
+                                  <div className="conversation-owner">
+                                    <strong>Owner:</strong> {conversation.owner.first_name} {conversation.owner.last_name}
+                                  </div>
+                                )}
+                                <div className="conversation-dates">
+                                  <div>
+                                    <strong>Created:</strong> {new Date(conversation.created_at).toLocaleString()}
+                                  </div>
+                                  <div>
+                                    <strong>Updated:</strong> {new Date(conversation.updated_at).toLocaleString()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {totalPages > 1 && (
+                        <div className="pagination-controls">
+                          <button
+                            onClick={handlePreviousPage}
+                            disabled={currentPage === 0}
+                            className="pagination-button"
+                          >
+                            ← Previous
+                          </button>
+                          <span className="pagination-info">
+                            Page {currentPage + 1} of {totalPages}
+                          </span>
+                          <button
+                            onClick={handleNextPage}
+                            disabled={currentPage === totalPages - 1}
+                            className="pagination-button"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="no-conversations">
+                      No conversations found for this user.
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>
