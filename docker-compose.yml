@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HEALTHIE_API_KEY=${HEALTHIE_API_KEY}
+      - HEALTHIE_ENV=${HEALTHIE_ENV:-staging}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Development services (use with docker-compose -f docker-compose.dev.yml up)
+  # Uncomment below for development mode with hot reload
+  
+  # backend-dev:
+  #   build:
+  #     context: .
+  #     dockerfile: .devcontainer/Dockerfile
+  #   ports:
+  #     - "3001:3001"
+  #   volumes:
+  #     - .:/workspace:cached
+  #     - /workspace/node_modules
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=3001
+  #     - HEALTHIE_API_KEY=${HEALTHIE_API_KEY}
+  #     - HEALTHIE_ENV=${HEALTHIE_ENV:-staging}
+  #   command: npm run start:dev
+  #   restart: unless-stopped
+
+  # frontend-dev:
+  #   build:
+  #     context: ./client
+  #     dockerfile: ../. devcontainer/Dockerfile
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - ./client:/workspace/client:cached
+  #     - /workspace/client/node_modules
+  #   environment:
+  #     - NODE_ENV=development
+  #   command: npm run dev -- --host
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - backend-dev
+

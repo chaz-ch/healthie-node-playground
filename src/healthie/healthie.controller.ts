@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { HealthieService } from './healthie.service';
 import { UserLookupDto } from '../dto/user-lookup.dto';
 import { ConversationDto } from '../dto/conversation.dto';
@@ -68,6 +68,51 @@ export class HealthieController {
       throw new HttpException(
         {
           error: 'Failed to create note',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('users')
+  async getUsers(@Query('offset') offset?: string, @Query('keywords') keywords?: string) {
+    try {
+      const offsetNum = offset ? parseInt(offset, 10) : 0;
+      const keywordsStr = keywords || '';
+      const data = await this.healthieService.getUsers(offsetNum, keywordsStr);
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to fetch users list',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('create-conversation')
+  async createConversation(@Body() body: { clinicianId: string; patientId: string; name?: string }) {
+    try {
+      if (!body.clinicianId || !body.patientId) {
+        throw new HttpException(
+          'Clinician ID and Patient ID are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const data = await this.healthieService.createConversation(
+        body.clinicianId,
+        body.patientId,
+        body.name,
+      );
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to create conversation',
           message: error.message,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,

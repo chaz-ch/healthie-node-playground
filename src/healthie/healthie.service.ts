@@ -130,6 +130,58 @@ export class HealthieService {
     `;
   }
 
+  private getUsersListQuery(offset: number = 0, keywords: string = ''): string {
+    const keywordsParam = keywords ? `, keywords: "${keywords}"` : '';
+    return `
+      query {
+        users(offset: ${offset}, should_paginate: true, active_status: "active"${keywordsParam}) {
+          id
+          first_name
+          last_name
+          email
+          phone_number
+        }
+      }
+    `;
+  }
+
+  private getCreateConversationMutation(clinicianId: string, patientId: string, name?: string): string {
+    const nameParam = name ? `name: "${name}"` : '';
+    // Use simple_added_users to add the patient as a participant
+    // Format: "user-{id}" where id is the user's ID
+    const simpleAddedUsers = `user-${patientId}`;
+    return `
+      mutation {
+        createConversation(input: {
+          owner_id: "${clinicianId}"
+          simple_added_users: "${simpleAddedUsers}"
+          ${nameParam}
+        }) {
+          conversation {
+            id
+            name
+            created_at
+            patient_id
+            owner {
+              id
+              first_name
+              last_name
+            }
+            invitees {
+              id
+              first_name
+              last_name
+            }
+          }
+          messages {
+            field
+            message
+          }
+        }
+      }
+    `;
+  }
+
   private getWebSocketUrl(): string {
     const isStaging = this.healthieEnv === 'staging';
     const wsBaseUrl = isStaging
@@ -215,6 +267,60 @@ export class HealthieService {
       return response.data.data;
     } catch (error) {
       this.logger.error('Error creating note:', error.message);
+      throw error;
+    }
+  }
+
+  async getUsers(offset: number = 0, keywords: string = '') {
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        { query: this.getUsersListQuery(offset, keywords) },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error fetching users list');
+      }
+
+      this.logger.log('Users List Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error fetching users list:', error.message);
+      throw error;
+    }
+  }
+
+  async createConversation(clinicianId: string, patientId: string, name?: string) {
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        { query: this.getCreateConversationMutation(clinicianId, patientId, name) },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error creating conversation');
+      }
+
+      this.logger.log('Create Conversation Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error creating conversation:', error.message);
       throw error;
     }
   }

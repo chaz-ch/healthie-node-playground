@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Backend development service with hot reload
+  backend:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/workspace:cached
+      - backend_node_modules:/workspace/node_modules
+    working_dir: /workspace
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - HEALTHIE_API_KEY=${HEALTHIE_API_KEY}
+      - HEALTHIE_ENV=${HEALTHIE_ENV:-staging}
+    command: npm run start:dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend development service with hot reload
+  frontend:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/workspace/client:cached
+      - frontend_node_modules:/workspace/client/node_modules
+    working_dir: /workspace/client
+    environment:
+      - NODE_ENV=development
+    command: npm run dev -- --host
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  backend_node_modules:
+  frontend_node_modules:
+

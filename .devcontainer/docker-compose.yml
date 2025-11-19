@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    
+    volumes:
+      # Mount the workspace
+      - ..:/workspace:cached
+      
+      # Persist node_modules for better performance
+      - node_modules:/workspace/node_modules
+      - client_node_modules:/workspace/client/node_modules
+    
+    # Overrides default command so things don't shut down after the process ends
+    command: sleep infinity
+    
+    # Runs app on the same network as the database container, allows "forwardPorts" in devcontainer.json function
+    network_mode: host
+    
+    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally
+    # (Adding the "ports" property to this file will not forward from a Codespace)
+    
+    environment:
+      - NODE_ENV=development
+
+volumes:
+  node_modules:
+  client_node_modules:
+

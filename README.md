@@ -2,6 +2,8 @@
 
 A NestJS backend with a React frontend that uses the Healthie API to manage user conversations and messages.
 
+> **🚀 Quick Start**: See [QUICKSTART.md](QUICKSTART.md) for the fastest way to get started!
+
 ## Features
 
 - **User Lookup** - Search for users by ID via Healthie API
@@ -14,11 +16,35 @@ A NestJS backend with a React frontend that uses the Healthie API to manage user
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v20 or higher)
 - npm or yarn
 - Healthie API key
+- **OR** Docker Desktop (for containerized development)
 
 ## Setup
+
+### Option 1: Docker Development Container (Recommended)
+
+The easiest way to get started is using VS Code Dev Containers:
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
+2. Install [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+3. Copy `.env.example` to `.env` and add your Healthie API key
+4. Open this project in VS Code
+5. Press `F1` and select "Dev Containers: Reopen in Container"
+6. Wait for the container to build (first time only)
+7. Run the application:
+   ```bash
+   # Terminal 1 - Backend
+   npm run start:dev
+
+   # Terminal 2 - Frontend
+   cd client && npm run dev
+   ```
+
+See [DOCKER.md](DOCKER.md) for more Docker options including production deployment.
+
+### Option 2: Local Development
 
 ### 1. Clone the repository and install dependencies
 
@@ -114,28 +140,39 @@ The frontend will run on `http://localhost:5173`
 
 ```
 .
-├── src/                        # NestJS backend source
-│   ├── main.ts                # Application entry point
-│   ├── app.module.ts          # Root module
-│   ├── dto/                   # Data Transfer Objects
+├── .devcontainer/             # VS Code Dev Container configuration
+│   ├── devcontainer.json     # Dev container settings
+│   ├── docker-compose.yml    # Dev container compose file
+│   └── Dockerfile            # Dev container image
+├── src/                       # NestJS backend source
+│   ├── main.ts               # Application entry point
+│   ├── app.module.ts         # Root module
+│   ├── dto/                  # Data Transfer Objects
 │   │   ├── user-lookup.dto.ts
 │   │   ├── conversation.dto.ts
 │   │   └── create-note.dto.ts
-│   └── healthie/              # Healthie module
+│   └── healthie/             # Healthie module
 │       ├── healthie.module.ts
 │       ├── healthie.controller.ts
 │       └── healthie.service.ts
-├── server.js                  # Legacy Express server (deprecated)
-├── tsconfig.json              # TypeScript configuration
-├── .env                       # Environment variables (create this)
-├── .env.example               # Example environment variables
-├── package.json               # Backend dependencies
-└── client/                    # React frontend
-    ├── src/
-    │   ├── App.jsx           # Main React component
-    │   ├── App.css           # Styles
-    │   └── main.jsx          # React entry point
-    └── package.json          # Frontend dependencies
+├── client/                    # React frontend
+│   ├── src/
+│   │   ├── App.jsx           # Main React component
+│   │   ├── App.css           # Styles
+│   │   └── main.jsx          # React entry point
+│   └── package.json          # Frontend dependencies
+├── Dockerfile                 # Production Docker image
+├── docker-compose.yml         # Production deployment
+├── docker-compose.dev.yml     # Development with Docker
+├── .dockerignore             # Docker ignore file
+├── server.js                 # Legacy Express server (deprecated)
+├── tsconfig.json             # TypeScript configuration
+├── .env                      # Environment variables (create this)
+├── .env.example              # Example environment variables
+├── package.json              # Backend dependencies
+├── README.md                 # This file
+├── DOCKER.md                 # Docker setup guide
+└── MIGRATION.md              # NestJS migration notes
 ```
 
 ## Technologies Used

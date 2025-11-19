@@ -14,6 +14,14 @@ function App() {
   const [newMessage, setNewMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [availableUsers, setAvailableUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [creatingConversation, setCreatingConversation] = useState(false)
+  const [userSearchQuery, setUserSearchQuery] = useState('')
+  const [userOffset, setUserOffset] = useState(0)
+  const [hasMoreUsers, setHasMoreUsers] = useState(true)
+  const [conversationTitle, setConversationTitle] = useState('')
 
   const wsRef = useRef(null)
   const channelIdRef = useRef(null)
@@ -101,6 +109,135 @@ function App() {
     setSelectedConversation(null)
     setConversationMessages([])
     setNewMessage('')
+  }
+
+  const fetchUsers = async (offset = 0, keywords = '', append = false) => {
+    setLoadingUsers(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (offset > 0) params.append('offset', offset.toString())
+      if (keywords) params.append('keywords', keywords)
+
+      const url = `http://localhost:3001/api/users${params.toString() ? '?' + params.toString() : ''}`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch users')
+      }
+
+      if (data.users) {
+        if (append) {
+          setAvailableUsers(prev => [...prev, ...data.users])
+        } else {
+          setAvailableUsers(data.users)
+        }
+        // If we got less than 10 users (typical page size), there are no more
+        setHasMoreUsers(data.users.length >= 10)
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err)
+      setError(err.message)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  const handleCreateConversation = async () => {
+    setShowCreateModal(true)
+    setUserSearchQuery('')
+    setUserOffset(0)
+    setAvailableUsers([])
+    setHasMoreUsers(true)
+    setConversationTitle('')
+    await fetchUsers(0, '')
+  }
+
+  const handleUserSearch = async (searchQuery) => {
+    setUserSearchQuery(searchQuery)
+    setUserOffset(0)
+    setAvailableUsers([])
+    setHasMoreUsers(true)
+    await fetchUsers(0, searchQuery)
+  }
+
+  const handleLoadMoreUsers = async () => {
+    const newOffset = userOffset + 10
+    setUserOffset(newOffset)
+    await fetchUsers(newOffset, userSearchQuery, true)
+  }
+
+  const handleSelectUser = async (selectedUser) => {
+    if (!userData) {
+      setError('Please look up a user first')
+      return
+    }
+
+    setCreatingConversation(true)
+    setError(null)
+
+    try {
+      const requestBody = {
+        clinicianId: userData.id,
+        patientId: selectedUser.id,
+      }
+
+      // Add name if provided
+      if (conversationTitle.trim()) {
+        requestBody.name = conversationTitle.trim()
+      }
+
+      const response = await fetch('http://localhost:3001/api/create-conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create conversation')
+      }
+
+      if (data.createConversation && data.createConversation.conversation) {
+        const newConversation = data.createConversation.conversation
+
+        // Add the new conversation to the list
+        setConversations(prev => [newConversation, ...prev])
+
+        // Close the modal
+        setShowCreateModal(false)
+        setAvailableUsers([])
+
+        // Optionally, open the new conversation
+        handleConversationClick(newConversation)
+      }
+    } catch (err) {
+      console.error('Error creating conversation:', err)
+      setError(err.message)
+    } finally {
+      setCreatingConversation(false)
+    }
+  }
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false)
+    setAvailableUsers([])
+    setUserSearchQuery('')
+    setUserOffset(0)
+    setHasMoreUsers(true)
+    setConversationTitle('')
+    setError(null)
   }
 
   const handleSendMessage = async (e) => {
@@ -552,11 +689,20 @@ function App() {
                 <>
                   <div className="conversations-header">
                     <h2>Conversations</h2>
-                    {conversations.length > 0 && (
-                      <div className="conversation-count">
-                        Total: {conversations.length}
-                      </div>
-                    )}
+                    <div className="conversations-header-actions">
+                      {conversations.length > 0 && (
+                        <div className="conversation-count">
+                          Total: {conversations.length}
+                        </div>
+                      )}
+                      <button
+                        onClick={handleCreateConversation}
+                        className="create-conversation-button"
+                        disabled={!userData}
+                      >
+                        + New Conversation
+                      </button>
+                    </div>
                   </div>
 
                   {conversations && conversations.length > 0 ? (
@@ -657,6 +803,102 @@ function App() {
               )}
             </div>
           </>
+        )}
+
+        {/* Create Conversation Modal */}
+        {showCreateModal && (
+          <div className="modal-overlay" onClick={handleCloseModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Create New Conversation</h2>
+                <button onClick={handleCloseModal} className="modal-close-button">
+                  ✕
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="conversation-title-container">
+                  <label htmlFor="conversation-title" className="conversation-title-label">
+                    Conversation Title (Optional)
+                  </label>
+                  <input
+                    id="conversation-title"
+                    type="text"
+                    placeholder="Enter a title for this conversation..."
+                    value={conversationTitle}
+                    onChange={(e) => setConversationTitle(e.target.value)}
+                    className="conversation-title-input"
+                    disabled={loadingUsers || creatingConversation}
+                  />
+                </div>
+
+                <div className="user-search-container">
+                  <input
+                    type="text"
+                    placeholder="Search users by name or email..."
+                    value={userSearchQuery}
+                    onChange={(e) => handleUserSearch(e.target.value)}
+                    className="user-search-input"
+                    disabled={loadingUsers}
+                  />
+                </div>
+
+                {loadingUsers && availableUsers.length === 0 ? (
+                  <div className="loading-users">Loading users...</div>
+                ) : (
+                  <>
+                    {availableUsers.length === 0 ? (
+                      <p className="no-users-message">
+                        {userSearchQuery ? 'No users found matching your search.' : 'No users available.'}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="modal-description">
+                          Select a user to start a conversation with:
+                        </p>
+                        <div className="users-list">
+                          {availableUsers.map((user) => (
+                            <div
+                              key={user.id}
+                              className="user-item"
+                              onClick={() => !creatingConversation && handleSelectUser(user)}
+                              style={{ cursor: creatingConversation ? 'not-allowed' : 'pointer' }}
+                            >
+                              <div className="user-info">
+                                <div className="user-name">
+                                  {user.first_name} {user.last_name}
+                                </div>
+                                <div className="user-details-small">
+                                  <span className="user-id">ID: {user.id}</span>
+                                  {user.email && <span className="user-email">{user.email}</span>}
+                                </div>
+                              </div>
+                              {creatingConversation ? (
+                                <span className="creating-indicator">Creating...</span>
+                              ) : (
+                                <span className="select-arrow">→</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {hasMoreUsers && (
+                          <div className="load-more-container">
+                            <button
+                              onClick={handleLoadMoreUsers}
+                              className="load-more-button"
+                              disabled={loadingUsers}
+                            >
+                              {loadingUsers ? 'Loading...' : 'Load More'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
