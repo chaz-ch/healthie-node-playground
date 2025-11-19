@@ -129,5 +129,77 @@ export class HealthieController {
   healthCheck() {
     return { status: 'ok', message: 'Server is running' };
   }
+
+  @Get('form-templates')
+  async getFormTemplates(@Query('offset') offset?: string, @Query('keywords') keywords?: string) {
+    try {
+      const offsetNum = offset ? parseInt(offset, 10) : 0;
+      const keywordsStr = keywords || '';
+      const data = await this.healthieService.getFormTemplates(offsetNum, keywordsStr);
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to fetch form templates',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('create-chart-note')
+  async createChartNote(
+    @Body() body: {
+      userId: string;
+      formId: string;
+      formAnswers: Array<{ custom_module_id: string; answer: string }>;
+    },
+  ) {
+    try {
+      if (!body.userId || !body.formId || !body.formAnswers) {
+        throw new HttpException(
+          'User ID, Form ID, and Form Answers are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const data = await this.healthieService.createChartNote(
+        body.userId,
+        body.formId,
+        body.formAnswers,
+      );
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to create chart note',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('chart-notes')
+  async getChartNotes(@Query('fillerId') fillerId?: string, @Query('offset') offset?: string) {
+    try {
+      if (!fillerId) {
+        throw new HttpException('Filler ID is required', HttpStatus.BAD_REQUEST);
+      }
+
+      const offsetNum = offset ? parseInt(offset, 10) : 0;
+      const data = await this.healthieService.getChartNotes(fillerId, offsetNum);
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to fetch chart notes',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
 

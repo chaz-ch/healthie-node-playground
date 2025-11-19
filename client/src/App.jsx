@@ -22,6 +22,22 @@ function App() {
   const [userOffset, setUserOffset] = useState(0)
   const [hasMoreUsers, setHasMoreUsers] = useState(true)
   const [conversationTitle, setConversationTitle] = useState('')
+  const [showChartNoteModal, setShowChartNoteModal] = useState(false)
+  const [formTemplates, setFormTemplates] = useState([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [formAnswers, setFormAnswers] = useState({})
+  const [creatingChartNote, setCreatingChartNote] = useState(false)
+  const [showChartNotesPane, setShowChartNotesPane] = useState(false)
+  const [chartNotes, setChartNotes] = useState([])
+  const [loadingChartNotes, setLoadingChartNotes] = useState(false)
+  const [chartNotesOffset, setChartNotesOffset] = useState(0)
+  const [chartNoteTargetUser, setChartNoteTargetUser] = useState(null)
+  const [chartNoteUsers, setChartNoteUsers] = useState([])
+  const [chartNoteUserSearchQuery, setChartNoteUserSearchQuery] = useState('')
+  const [chartNoteUserOffset, setChartNoteUserOffset] = useState(0)
+  const [hasMoreChartNoteUsers, setHasMoreChartNoteUsers] = useState(true)
+  const [loadingChartNoteUsers, setLoadingChartNoteUsers] = useState(false)
 
   const wsRef = useRef(null)
   const channelIdRef = useRef(null)
@@ -238,6 +254,219 @@ function App() {
     setHasMoreUsers(true)
     setConversationTitle('')
     setError(null)
+  }
+
+  const handleCreateChartNote = async () => {
+    setShowChartNoteModal(true)
+    setChartNoteTargetUser(null)
+    setSelectedTemplate(null)
+    setFormAnswers({})
+    setChartNoteUsers([])
+    setChartNoteUserSearchQuery('')
+    setChartNoteUserOffset(0)
+    setHasMoreChartNoteUsers(true)
+    setError(null)
+
+    // Fetch initial users
+    fetchChartNoteUsers(0, '')
+  }
+
+  const fetchChartNoteUsers = async (offset = 0, keywords = '') => {
+    setLoadingChartNoteUsers(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (keywords) params.append('keywords', keywords)
+      params.append('offset', offset.toString())
+
+      const response = await fetch(`http://localhost:3001/api/users?${params}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch users')
+      }
+
+      const users = data.users || []
+
+      if (offset === 0) {
+        setChartNoteUsers(users)
+      } else {
+        setChartNoteUsers(prev => [...prev, ...users])
+      }
+
+      setChartNoteUserOffset(offset)
+      setHasMoreChartNoteUsers(users.length === 10)
+    } catch (err) {
+      console.error('Error fetching users:', err)
+      setError(err.message)
+    } finally {
+      setLoadingChartNoteUsers(false)
+    }
+  }
+
+  const handleChartNoteUserSearch = (e) => {
+    e.preventDefault()
+    fetchChartNoteUsers(0, chartNoteUserSearchQuery)
+  }
+
+  const handleLoadMoreChartNoteUsers = () => {
+    const newOffset = chartNoteUserOffset + 10
+    fetchChartNoteUsers(newOffset, chartNoteUserSearchQuery)
+  }
+
+  const handleChartNoteUserSelect = async (user) => {
+    setChartNoteTargetUser(user)
+    setLoadingTemplates(true)
+    setError(null)
+
+    try {
+      // Fetch charting templates only (use_for_charting = true)
+      const response = await fetch('http://localhost:3001/api/form-templates?keywords=charting')
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch form templates')
+      }
+
+      // Filter to only show templates with use_for_charting = true
+      const chartingTemplates = data.customModuleForms?.filter(t => t.use_for_charting) || []
+      setFormTemplates(chartingTemplates)
+    } catch (err) {
+      console.error('Error fetching form templates:', err)
+      setError(err.message)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const handleCloseChartNoteModal = () => {
+    setShowChartNoteModal(false)
+    setChartNoteTargetUser(null)
+    setSelectedTemplate(null)
+    setFormAnswers({})
+    setFormTemplates([])
+    setChartNoteUsers([])
+    setChartNoteUserSearchQuery('')
+    setChartNoteUserOffset(0)
+    setHasMoreChartNoteUsers(true)
+    setError(null)
+  }
+
+  const handleTemplateSelect = (template) => {
+    setSelectedTemplate(template)
+    // Initialize form answers with empty values
+    const initialAnswers = {}
+    template.custom_modules?.forEach(module => {
+      if (module.mod_type !== 'label') {
+        initialAnswers[module.id] = ''
+      }
+    })
+    setFormAnswers(initialAnswers)
+  }
+
+  const handleFormFieldChange = (moduleId, value) => {
+    setFormAnswers(prev => ({
+      ...prev,
+      [moduleId]: value
+    }))
+  }
+
+  const handleSubmitChartNote = async (e) => {
+    e.preventDefault()
+
+    if (!chartNoteTargetUser || !selectedTemplate) {
+      return
+    }
+
+    setCreatingChartNote(true)
+    setError(null)
+
+    try {
+      // Convert formAnswers object to array format expected by API
+      const formAnswersArray = Object.entries(formAnswers)
+        .filter(([_, value]) => value !== '') // Only include non-empty answers
+        .map(([custom_module_id, answer]) => ({
+          custom_module_id,
+          answer: String(answer) // Ensure answer is a string
+        }))
+
+      const response = await fetch('http://localhost:3001/api/create-chart-note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: chartNoteTargetUser.id,
+          formId: selectedTemplate.id,
+          formAnswers: formAnswersArray,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create chart note')
+      }
+
+      if (data.createFormAnswerGroup && data.createFormAnswerGroup.form_answer_group) {
+        // Success! Close the modal
+        alert(`Chart note created successfully! ID: ${data.createFormAnswerGroup.form_answer_group.id}`)
+        handleCloseChartNoteModal()
+
+        // Refresh chart notes list if the pane is open
+        if (showChartNotesPane) {
+          fetchChartNotes(0, false)
+        }
+      }
+    } catch (err) {
+      console.error('Error creating chart note:', err)
+      setError(err.message)
+    } finally {
+      setCreatingChartNote(false)
+    }
+  }
+
+  const fetchChartNotes = async (offset = 0, append = false) => {
+    if (!userData) return
+
+    setLoadingChartNotes(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/chart-notes?fillerId=${userData.id}&offset=${offset}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch chart notes')
+      }
+
+      const notes = data.formAnswerGroups || []
+
+      if (append) {
+        setChartNotes(prev => [...prev, ...notes])
+      } else {
+        setChartNotes(notes)
+      }
+
+      setChartNotesOffset(offset)
+    } catch (err) {
+      console.error('Error fetching chart notes:', err)
+      setError(err.message)
+    } finally {
+      setLoadingChartNotes(false)
+    }
+  }
+
+  const handleShowChartNotes = () => {
+    setShowChartNotesPane(true)
+    setSelectedConversation(null)
+    fetchChartNotes(0, false)
+  }
+
+  const handleLoadMoreChartNotes = () => {
+    const newOffset = chartNotesOffset + 10
+    fetchChartNotes(newOffset, true)
   }
 
   const handleSendMessage = async (e) => {
@@ -615,6 +844,26 @@ function App() {
             </div>
 
             <div className="conversations-card">
+              {/* Tabs for switching between Conversations and Chart Notes */}
+              <div className="tabs-container">
+                <button
+                  className={`tab-button ${!showChartNotesPane ? 'active' : ''}`}
+                  onClick={() => {
+                    setShowChartNotesPane(false)
+                    setSelectedConversation(null)
+                  }}
+                >
+                  Conversations
+                </button>
+                <button
+                  className={`tab-button ${showChartNotesPane ? 'active' : ''}`}
+                  onClick={handleShowChartNotes}
+                  disabled={!userData}
+                >
+                  Chart Notes
+                </button>
+              </div>
+
               {selectedConversation ? (
                 <>
                   <div className="conversation-detail-header">
@@ -685,8 +934,87 @@ function App() {
                     </>
                   )}
                 </>
+              ) : showChartNotesPane ? (
+                <>
+                  {/* Chart Notes Pane */}
+                  <div className="conversations-header">
+                    <h2>Chart Notes</h2>
+                    <div className="conversations-header-actions">
+                      {chartNotes.length > 0 && (
+                        <div className="conversation-count">
+                          Total: {chartNotes.length}
+                        </div>
+                      )}
+                      <button
+                        onClick={handleCreateChartNote}
+                        className="create-conversation-button"
+                        disabled={!userData}
+                      >
+                        + New Chart Note
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingChartNotes && chartNotes.length === 0 ? (
+                    <div className="loading-messages">Loading chart notes...</div>
+                  ) : chartNotes.length > 0 ? (
+                    <>
+                      <div className="conversations-list">
+                        {chartNotes.map((note) => (
+                          <div key={note.id} className="conversation-item chart-note-item">
+                            <div className="conversation-header">
+                              <h3 className="conversation-name">
+                                {note.name || 'Untitled Chart Note'}
+                              </h3>
+                              <span className="conversation-id">ID: {note.id}</span>
+                            </div>
+
+                            <div className="chart-note-details">
+                              <div className="detail-row">
+                                <strong>Patient:</strong>
+                                <span>
+                                  {note.user?.first_name} {note.user?.last_name}
+                                  {note.user?.id && ` (ID: ${note.user.id})`}
+                                </span>
+                              </div>
+                              <div className="detail-row">
+                                <strong>Template:</strong>
+                                <span>{note.custom_module_form?.name || 'N/A'}</span>
+                              </div>
+                              <div className="detail-row">
+                                <strong>Created:</strong>
+                                <span>{new Date(note.created_at).toLocaleString()}</span>
+                              </div>
+                              <div className="detail-row">
+                                <strong>Status:</strong>
+                                <span className={note.finished ? 'status-finished' : 'status-draft'}>
+                                  {note.finished ? 'Finished' : 'Draft'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="load-more-container">
+                        <button
+                          onClick={handleLoadMoreChartNotes}
+                          className="pagination-button"
+                          disabled={loadingChartNotes}
+                        >
+                          {loadingChartNotes ? 'Loading...' : 'Load More'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="no-conversations">
+                      No chart notes found for this user.
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
+                  {/* Conversations Pane */}
                   <div className="conversations-header">
                     <h2>Conversations</h2>
                     <div className="conversations-header-actions">
@@ -895,6 +1223,264 @@ function App() {
                       </>
                     )}
                   </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Chart Note Modal */}
+        {showChartNoteModal && (
+          <div className="modal-overlay" onClick={handleCloseChartNoteModal}>
+            <div className="modal-content chart-note-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Create Chart Note</h2>
+                <button onClick={handleCloseChartNoteModal} className="modal-close-button">
+                  ✕
+                </button>
+              </div>
+
+              <div className="modal-body">
+                {!chartNoteTargetUser ? (
+                  <>
+                    {/* Step 1: Select Target User */}
+                    <p className="modal-description">Select a patient for this chart note:</p>
+
+                    <form onSubmit={handleChartNoteUserSearch} className="user-search-form">
+                      <input
+                        type="text"
+                        value={chartNoteUserSearchQuery}
+                        onChange={(e) => setChartNoteUserSearchQuery(e.target.value)}
+                        placeholder="Search by name..."
+                        className="user-search-input"
+                      />
+                      <button type="submit" className="search-button-small">
+                        Search
+                      </button>
+                    </form>
+
+                    {loadingChartNoteUsers && chartNoteUsers.length === 0 ? (
+                      <div className="loading-users">Loading users...</div>
+                    ) : chartNoteUsers.length > 0 ? (
+                      <>
+                        <div className="users-list">
+                          {chartNoteUsers.map((user) => (
+                            <div
+                              key={user.id}
+                              className="user-item"
+                              onClick={() => handleChartNoteUserSelect(user)}
+                            >
+                              <div className="user-info">
+                                <div className="user-name">
+                                  {user.first_name} {user.last_name}
+                                </div>
+                                <div className="user-id">ID: {user.id}</div>
+                              </div>
+                              <span className="select-arrow">→</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {hasMoreChartNoteUsers && (
+                          <div className="load-more-container">
+                            <button
+                              type="button"
+                              onClick={handleLoadMoreChartNoteUsers}
+                              className="pagination-button"
+                              disabled={loadingChartNoteUsers}
+                            >
+                              {loadingChartNoteUsers ? 'Loading...' : 'Load More'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="no-users-message">No users found.</p>
+                    )}
+                  </>
+                ) : loadingTemplates ? (
+                  <div className="loading-users">Loading templates...</div>
+                ) : !selectedTemplate ? (
+                  <>
+                    {/* Step 2: Select Template */}
+                    <div className="selected-user-info">
+                      <strong>Patient:</strong> {chartNoteTargetUser.first_name} {chartNoteTargetUser.last_name} (ID: {chartNoteTargetUser.id})
+                      <button
+                        type="button"
+                        onClick={() => setChartNoteTargetUser(null)}
+                        className="change-user-button"
+                      >
+                        Change Patient
+                      </button>
+                    </div>
+
+                    {formTemplates.length === 0 ? (
+                      <p className="no-users-message">No charting templates available.</p>
+                    ) : (
+                      <>
+                        <p className="modal-description">Select a template:</p>
+                        <div className="templates-list">
+                          {formTemplates.map((template) => (
+                            <div
+                              key={template.id}
+                              className="template-item"
+                              onClick={() => handleTemplateSelect(template)}
+                            >
+                              <div className="template-info">
+                                <div className="template-name">{template.name}</div>
+                                <div className="template-details">
+                                  {template.custom_modules?.length || 0} fields
+                                </div>
+                              </div>
+                              <span className="select-arrow">→</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <form onSubmit={handleSubmitChartNote} className="chart-note-form">
+                    <div className="form-header">
+                      <h3>{selectedTemplate.name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTemplate(null)}
+                        className="back-button"
+                      >
+                        ← Back to Templates
+                      </button>
+                    </div>
+
+                    <div className="form-fields">
+                      {selectedTemplate.custom_modules?.map((module) => {
+                        if (module.mod_type === 'label') {
+                          return (
+                            <div key={module.id} className="form-field-label">
+                              <strong>{module.label}</strong>
+                            </div>
+                          )
+                        }
+
+                        const value = formAnswers[module.id] || ''
+
+                        return (
+                          <div key={module.id} className="form-field">
+                            <label htmlFor={`field-${module.id}`} className="field-label">
+                              {module.label}
+                              {module.required && <span className="required-indicator">*</span>}
+                            </label>
+
+                            {module.mod_type === 'text' && (
+                              <input
+                                id={`field-${module.id}`}
+                                type="text"
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-input"
+                                required={module.required}
+                                placeholder={module.options || ''}
+                              />
+                            )}
+
+                            {module.mod_type === 'textarea' && (
+                              <textarea
+                                id={`field-${module.id}`}
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-textarea"
+                                required={module.required}
+                                rows={4}
+                              />
+                            )}
+
+                            {module.mod_type === 'number' && (
+                              <input
+                                id={`field-${module.id}`}
+                                type="number"
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-input"
+                                required={module.required}
+                              />
+                            )}
+
+                            {module.mod_type === 'date' && (
+                              <input
+                                id={`field-${module.id}`}
+                                type="date"
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-input"
+                                required={module.required}
+                              />
+                            )}
+
+                            {module.mod_type === 'time' && (
+                              <input
+                                id={`field-${module.id}`}
+                                type="time"
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-input"
+                                required={module.required}
+                              />
+                            )}
+
+                            {(module.mod_type === 'dropdown' || module.mod_type === 'radio') && (
+                              <select
+                                id={`field-${module.id}`}
+                                value={value}
+                                onChange={(e) => handleFormFieldChange(module.id, e.target.value)}
+                                className="field-select"
+                                required={module.required}
+                              >
+                                <option value="">Select an option...</option>
+                                {module.options?.split('\n').map((option, idx) => (
+                                  <option key={idx} value={option.trim()}>
+                                    {option.trim()}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {module.mod_type === 'checkbox' && (
+                              <div className="checkbox-group">
+                                {module.options?.split('\n').map((option, idx) => (
+                                  <label key={idx} className="checkbox-label">
+                                    <input
+                                      type="checkbox"
+                                      value={option.trim()}
+                                      checked={value.includes(option.trim())}
+                                      onChange={(e) => {
+                                        const optionValue = option.trim()
+                                        const currentValues = value ? value.split(', ') : []
+                                        const newValues = e.target.checked
+                                          ? [...currentValues, optionValue]
+                                          : currentValues.filter(v => v !== optionValue)
+                                        handleFormFieldChange(module.id, newValues.join(', '))
+                                      }}
+                                    />
+                                    {option.trim()}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="form-actions">
+                      <button
+                        type="submit"
+                        className="submit-button"
+                        disabled={creatingChartNote}
+                      >
+                        {creatingChartNote ? 'Creating...' : 'Create Chart Note'}
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
             </div>

@@ -190,6 +190,70 @@ export class HealthieService {
     return `${wsBaseUrl}?token=${this.apiKey}`;
   }
 
+  private getFormTemplatesQuery(offset: number = 0, keywords: string = ''): string {
+    const keywordsParam = keywords ? `, keywords: "${keywords}"` : '';
+    return `
+      query {
+        customModuleForms(offset: ${offset}, should_paginate: true${keywordsParam}) {
+          id
+          name
+          use_for_charting
+          custom_modules {
+            id
+            label
+            mod_type
+            required
+            options
+          }
+        }
+      }
+    `;
+  }
+
+  private getCreateChartNoteMutation(
+    userId: string,
+    formId: string,
+    formAnswers: Array<{ custom_module_id: string; answer: string }>,
+  ): string {
+    // Format form_answers array for GraphQL syntax
+    const formAnswersGraphQL = formAnswers.map(fa => {
+      // Escape double quotes in the answer value
+      const escapedAnswer = fa.answer.replace(/"/g, '\\"');
+      return `{custom_module_id: "${fa.custom_module_id}", user_id: "${userId}", answer: "${escapedAnswer}"}`;
+    }).join(', ');
+
+    return `
+      mutation {
+        createFormAnswerGroup(input: {
+          user_id: "${userId}"
+          custom_module_form_id: "${formId}"
+          finished: true
+          form_answers: [${formAnswersGraphQL}]
+        }) {
+          form_answer_group {
+            id
+            name
+            created_at
+            form_answers {
+              id
+              label
+              displayed_answer
+              custom_module {
+                id
+                label
+                mod_type
+              }
+            }
+          }
+          messages {
+            field
+            message
+          }
+        }
+      }
+    `;
+  }
+
   async getUserData(userId: string) {
     try {
       const response = await axios.post(
@@ -327,6 +391,121 @@ export class HealthieService {
 
   getWebSocketUrlForClient(): { wsUrl: string } {
     return { wsUrl: this.getWebSocketUrl() };
+  }
+
+  async getFormTemplates(offset: number = 0, keywords: string = '') {
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        { query: this.getFormTemplatesQuery(offset, keywords) },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error fetching form templates');
+      }
+
+      this.logger.log('Form Templates Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error fetching form templates:', error.message);
+      throw error;
+    }
+  }
+
+  async createChartNote(
+    userId: string,
+    formId: string,
+    formAnswers: Array<{ custom_module_id: string; answer: string }>,
+  ) {
+    try {
+      const mutation = this.getCreateChartNoteMutation(userId, formId, formAnswers);
+
+      const response = await axios.post(
+        this.apiUrl,
+        { query: mutation },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error creating chart note');
+      }
+
+      this.logger.log('Create Chart Note Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error creating chart note:', error.message);
+      throw error;
+    }
+  }
+
+  private getChartNotesQuery(fillerId: string, offset: number = 0): string {
+    return `
+      query {
+        formAnswerGroups(filler_id: "${fillerId}", should_paginate: true, offset: ${offset}) {
+          id
+          name
+          created_at
+          finished
+          user {
+            id
+            first_name
+            last_name
+          }
+          filler {
+            id
+            first_name
+            last_name
+          }
+          custom_module_form {
+            id
+            name
+            use_for_charting
+          }
+        }
+      }
+    `;
+  }
+
+  async getChartNotes(fillerId: string, offset: number = 0) {
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        { query: this.getChartNotesQuery(fillerId, offset) },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error fetching chart notes');
+      }
+
+      this.logger.log('Chart Notes Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error fetching chart notes:', error.message);
+      throw error;
+    }
   }
 }
 
