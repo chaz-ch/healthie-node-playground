@@ -38,6 +38,20 @@ function App() {
   const [chartNoteUserOffset, setChartNoteUserOffset] = useState(0)
   const [hasMoreChartNoteUsers, setHasMoreChartNoteUsers] = useState(true)
   const [loadingChartNoteUsers, setLoadingChartNoteUsers] = useState(false)
+  const [showTasksPane, setShowTasksPane] = useState(false)
+  const [tasks, setTasks] = useState([])
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const [tasksOffset, setTasksOffset] = useState(0)
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
+  const [taskContent, setTaskContent] = useState('')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskTargetUser, setTaskTargetUser] = useState(null)
+  const [taskUsers, setTaskUsers] = useState([])
+  const [taskUserSearchQuery, setTaskUserSearchQuery] = useState('')
+  const [taskUserOffset, setTaskUserOffset] = useState(0)
+  const [hasMoreTaskUsers, setHasMoreTaskUsers] = useState(true)
+  const [loadingTaskUsers, setLoadingTaskUsers] = useState(false)
+  const [creatingTask, setCreatingTask] = useState(false)
 
   const wsRef = useRef(null)
   const channelIdRef = useRef(null)
@@ -469,6 +483,172 @@ function App() {
     fetchChartNotes(newOffset, true)
   }
 
+  // Task-related functions
+  const fetchTasks = async (offset = 0, append = false) => {
+    if (!userData) return
+
+    setLoadingTasks(true)
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks?createdBySelf=true&offset=${offset}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch tasks')
+      }
+
+      if (data.tasks) {
+        if (append) {
+          setTasks(prev => [...prev, ...data.tasks])
+        } else {
+          setTasks(data.tasks)
+        }
+        setTasksOffset(offset)
+      }
+    } catch (err) {
+      console.error('Error fetching tasks:', err)
+      setError(err.message)
+    } finally {
+      setLoadingTasks(false)
+    }
+  }
+
+  const handleShowTasks = () => {
+    setShowTasksPane(true)
+    setShowChartNotesPane(false)
+    setSelectedConversation(null)
+    fetchTasks(0, false)
+  }
+
+  const handleLoadMoreTasks = () => {
+    const newOffset = tasksOffset + 10
+    fetchTasks(newOffset, true)
+  }
+
+  const handleOpenCreateTaskModal = () => {
+    setShowCreateTaskModal(true)
+    setTaskContent('')
+    setTaskDueDate('')
+    setTaskTargetUser(null)
+    setTaskUsers([])
+    setTaskUserSearchQuery('')
+    setTaskUserOffset(0)
+    setHasMoreTaskUsers(true)
+    fetchTaskUsers(0, false)
+  }
+
+  const handleCloseCreateTaskModal = () => {
+    setShowCreateTaskModal(false)
+    setTaskContent('')
+    setTaskDueDate('')
+    setTaskTargetUser(null)
+    setTaskUsers([])
+    setTaskUserSearchQuery('')
+    setTaskUserOffset(0)
+    setHasMoreTaskUsers(true)
+  }
+
+  const fetchTaskUsers = async (offset = 0, append = false) => {
+    setLoadingTaskUsers(true)
+    try {
+      const response = await fetch(`http://localhost:3001/api/users?offset=${offset}&keywords=${taskUserSearchQuery}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch users')
+      }
+
+      if (data.users) {
+        if (append) {
+          setTaskUsers(prev => [...prev, ...data.users])
+        } else {
+          setTaskUsers(data.users)
+        }
+        setTaskUserOffset(offset)
+        setHasMoreTaskUsers(data.users.length === 10)
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err)
+      setError(err.message)
+    } finally {
+      setLoadingTaskUsers(false)
+    }
+  }
+
+  const handleTaskUserSearch = (e) => {
+    setTaskUserSearchQuery(e.target.value)
+    setTaskUserOffset(0)
+    setHasMoreTaskUsers(true)
+  }
+
+  useEffect(() => {
+    if (showCreateTaskModal) {
+      const timeoutId = setTimeout(() => {
+        fetchTaskUsers(0, false)
+      }, 300)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [taskUserSearchQuery, showCreateTaskModal])
+
+  const handleLoadMoreTaskUsers = () => {
+    const newOffset = taskUserOffset + 10
+    fetchTaskUsers(newOffset, true)
+  }
+
+  const handleSelectTaskUser = (user) => {
+    setTaskTargetUser(user)
+  }
+
+  const handleSubmitTask = async (e) => {
+    e.preventDefault()
+
+    if (!taskTargetUser) {
+      alert('Please select a patient for the task')
+      return
+    }
+
+    if (!taskContent.trim()) {
+      alert('Please enter task content')
+      return
+    }
+
+    setCreatingTask(true)
+    try {
+      const response = await fetch('http://localhost:3001/api/create-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: taskTargetUser.id,
+          content: taskContent,
+          dueDate: taskDueDate || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create task')
+      }
+
+      if (data.createTask && data.createTask.task) {
+        // Success! Close the modal
+        alert(`Task created successfully! ID: ${data.createTask.task.id}`)
+        handleCloseCreateTaskModal()
+
+        // Refresh tasks list if the pane is open
+        if (showTasksPane) {
+          fetchTasks(0, false)
+        }
+      }
+    } catch (err) {
+      console.error('Error creating task:', err)
+      setError(err.message)
+    } finally {
+      setCreatingTask(false)
+    }
+  }
+
   const handleSendMessage = async (e) => {
     e.preventDefault()
 
@@ -844,12 +1024,13 @@ function App() {
             </div>
 
             <div className="conversations-card">
-              {/* Tabs for switching between Conversations and Chart Notes */}
+              {/* Tabs for switching between Conversations, Chart Notes, and Tasks */}
               <div className="tabs-container">
                 <button
-                  className={`tab-button ${!showChartNotesPane ? 'active' : ''}`}
+                  className={`tab-button ${!showChartNotesPane && !showTasksPane ? 'active' : ''}`}
                   onClick={() => {
                     setShowChartNotesPane(false)
+                    setShowTasksPane(false)
                     setSelectedConversation(null)
                   }}
                 >
@@ -861,6 +1042,13 @@ function App() {
                   disabled={!userData}
                 >
                   Chart Notes
+                </button>
+                <button
+                  className={`tab-button ${showTasksPane ? 'active' : ''}`}
+                  onClick={handleShowTasks}
+                  disabled={!userData}
+                >
+                  Tasks
                 </button>
               </div>
 
@@ -1009,6 +1197,93 @@ function App() {
                   ) : (
                     <div className="no-conversations">
                       No chart notes found for this user.
+                    </div>
+                  )}
+                </>
+              ) : showTasksPane ? (
+                <>
+                  {/* Tasks Pane */}
+                  <div className="conversations-header">
+                    <h2>Tasks</h2>
+                    <div className="conversations-header-actions">
+                      {tasks.length > 0 && (
+                        <div className="conversation-count">
+                          Total: {tasks.length}
+                        </div>
+                      )}
+                      <button
+                        onClick={handleOpenCreateTaskModal}
+                        className="create-conversation-button"
+                        disabled={!userData}
+                      >
+                        + New Task
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingTasks && tasks.length === 0 ? (
+                    <div className="loading-messages">Loading tasks...</div>
+                  ) : tasks.length > 0 ? (
+                    <>
+                      <div className="conversations-list">
+                        {tasks.map((task) => (
+                          <div key={task.id} className="conversation-item task-item">
+                            <div className="conversation-header">
+                              <h3 className="conversation-name">
+                                {task.content}
+                              </h3>
+                              <span className="conversation-id">ID: {task.id}</span>
+                            </div>
+
+                            <div className="chart-note-details">
+                              <div className="detail-row">
+                                <strong>Patient:</strong>
+                                <span>
+                                  {task.client?.first_name} {task.client?.last_name}
+                                  {task.client?.id && ` (ID: ${task.client.id})`}
+                                </span>
+                              </div>
+                              <div className="detail-row">
+                                <strong>Assigned To:</strong>
+                                <span>
+                                  {task.user?.first_name} {task.user?.last_name}
+                                  {task.user?.id && ` (ID: ${task.user.id})`}
+                                </span>
+                              </div>
+                              {task.due_date && (
+                                <div className="detail-row">
+                                  <strong>Due Date:</strong>
+                                  <span>{new Date(task.due_date).toLocaleString()}</span>
+                                </div>
+                              )}
+                              <div className="detail-row">
+                                <strong>Created:</strong>
+                                <span>{new Date(task.created_at).toLocaleString()}</span>
+                              </div>
+                              <div className="detail-row">
+                                <strong>Status:</strong>
+                                <span className={task.complete ? 'status-finished' : 'status-draft'}>
+                                  {task.complete ? 'Complete' : 'Incomplete'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="load-more-container">
+                        <button
+                          onClick={handleLoadMoreTasks}
+                          className="pagination-button"
+                          disabled={loadingTasks}
+                        >
+                          {loadingTasks ? 'Loading...' : 'Load More'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="no-conversations">
+                      No tasks found.
                     </div>
                   )}
                 </>
@@ -1481,6 +1756,135 @@ function App() {
                       </button>
                     </div>
                   </form>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Task Modal */}
+        {showCreateTaskModal && (
+          <div className="modal-overlay" onClick={handleCloseCreateTaskModal}>
+            <div className="modal-content chart-note-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Create Task</h2>
+                <button onClick={handleCloseCreateTaskModal} className="modal-close-button">
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                {!taskTargetUser ? (
+                  <>
+                    {/* Step 1: Select Patient */}
+                    <h3>Step 1: Select Patient</h3>
+                    <div className="user-search">
+                      <input
+                        type="text"
+                        placeholder="Search patients..."
+                        value={taskUserSearchQuery}
+                        onChange={handleTaskUserSearch}
+                        className="search-input"
+                      />
+                    </div>
+
+                    {loadingTaskUsers && taskUsers.length === 0 ? (
+                      <div className="loading-users">Loading patients...</div>
+                    ) : (
+                      <>
+                        <div className="users-list">
+                          {taskUsers.map((user) => (
+                            <div
+                              key={user.id}
+                              className="user-item"
+                              onClick={() => handleSelectTaskUser(user)}
+                            >
+                              <div className="user-info">
+                                <strong>
+                                  {user.first_name} {user.last_name}
+                                </strong>
+                                <span className="user-id">ID: {user.id}</span>
+                              </div>
+                              {user.email && <div className="user-email">{user.email}</div>}
+                            </div>
+                          ))}
+                        </div>
+
+                        {hasMoreTaskUsers && (
+                          <div className="load-more-container">
+                            <button
+                              onClick={handleLoadMoreTaskUsers}
+                              className="pagination-button"
+                              disabled={loadingTaskUsers}
+                            >
+                              {loadingTaskUsers ? 'Loading...' : 'Load More'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Step 2: Enter Task Details */}
+                    <div className="selected-user-info">
+                      <h3>Creating task for:</h3>
+                      <div className="user-card">
+                        <strong>
+                          {taskTargetUser.first_name} {taskTargetUser.last_name}
+                        </strong>
+                        <span className="user-id">ID: {taskTargetUser.id}</span>
+                        <button
+                          onClick={() => setTaskTargetUser(null)}
+                          className="change-user-button"
+                        >
+                          Change Patient
+                        </button>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSubmitTask} className="task-form">
+                      <div className="form-group">
+                        <label htmlFor="taskContent">Task Description *</label>
+                        <textarea
+                          id="taskContent"
+                          value={taskContent}
+                          onChange={(e) => setTaskContent(e.target.value)}
+                          placeholder="Enter task description..."
+                          rows={4}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label htmlFor="taskDueDate">Due Date (Optional)</label>
+                        <input
+                          type="date"
+                          id="taskDueDate"
+                          value={taskDueDate}
+                          onChange={(e) => setTaskDueDate(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="modal-actions">
+                        <button
+                          type="button"
+                          onClick={handleCloseCreateTaskModal}
+                          className="cancel-button"
+                          disabled={creatingTask}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="submit-button"
+                          disabled={creatingTask}
+                        >
+                          {creatingTask ? 'Creating...' : 'Create Task'}
+                        </button>
+                      </div>
+                    </form>
+                  </>
                 )}
               </div>
             </div>

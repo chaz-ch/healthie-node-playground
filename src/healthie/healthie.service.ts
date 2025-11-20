@@ -507,5 +507,132 @@ export class HealthieService {
       throw error;
     }
   }
+
+  // Task-related methods
+  private getCreateTaskMutation(
+    clientId: string,
+    content: string,
+    dueDate?: string,
+  ): string {
+    const dueDateParam = dueDate ? `due_date: "${dueDate}"` : '';
+
+    return `
+      mutation {
+        createTask(input: {
+          client_id: "${clientId}"
+          content: "${content.replace(/"/g, '\\"')}"
+          ${dueDateParam}
+        }) {
+          task {
+            id
+            content
+            due_date
+            complete
+            created_at
+            client {
+              id
+              first_name
+              last_name
+            }
+            user {
+              id
+              first_name
+              last_name
+            }
+          }
+          messages {
+            field
+            message
+          }
+        }
+      }
+    `;
+  }
+
+  async createTask(
+    clientId: string,
+    content: string,
+    dueDate?: string,
+  ) {
+    try {
+      const mutation = this.getCreateTaskMutation(clientId, content, dueDate);
+
+      const response = await axios.post(
+        this.apiUrl,
+        { query: mutation },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error creating task');
+      }
+
+      this.logger.log('Create Task Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error creating task:', error.message);
+      throw error;
+    }
+  }
+
+  private getTasksQuery(createdBySelf: boolean = true, offset: number = 0): string {
+    return `
+      query {
+        tasks(created_by_self: ${createdBySelf}, offset: ${offset}) {
+          id
+          content
+          due_date
+          complete
+          created_at
+          client {
+            id
+            first_name
+            last_name
+          }
+          user {
+            id
+            first_name
+            last_name
+          }
+        }
+      }
+    `;
+  }
+
+  async getTasks(createdBySelf: boolean = true, offset: number = 0) {
+    try {
+      const query = this.getTasksQuery(createdBySelf, offset);
+
+      const response = await axios.post(
+        this.apiUrl,
+        { query },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'AuthorizationSource': 'API',
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (response.data.errors) {
+        this.logger.error('GraphQL Errors:', JSON.stringify(response.data.errors, null, 2));
+        throw new Error('Error fetching tasks');
+      }
+
+      this.logger.log('Tasks Response:', JSON.stringify(response.data.data, null, 2));
+      return response.data.data;
+    } catch (error) {
+      this.logger.error('Error fetching tasks:', error.message);
+      throw error;
+    }
+  }
 }
 

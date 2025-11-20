@@ -201,5 +201,56 @@ export class HealthieController {
       );
     }
   }
+
+  @Post('create-task')
+  async createTask(
+    @Body() body: {
+      clientId: string;
+      content: string;
+      dueDate?: string;
+    },
+  ) {
+    try {
+      if (!body.clientId || !body.content) {
+        throw new HttpException(
+          'Client ID and content are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const data = await this.healthieService.createTask(
+        body.clientId,
+        body.content,
+        body.dueDate,
+      );
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to create task',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('tasks')
+  async getTasks(@Query('createdBySelf') createdBySelf?: string, @Query('offset') offset?: string) {
+    try {
+      const createdBySelfBool = createdBySelf === 'true';
+      const offsetNum = offset ? parseInt(offset, 10) : 0;
+      const data = await this.healthieService.getTasks(createdBySelfBool, offsetNum);
+      return data;
+    } catch (error) {
+      throw new HttpException(
+        {
+          error: 'Failed to fetch tasks',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
 
